@@ -287,19 +287,20 @@ class Game():
         self.renderer = Render(30, size)
         self.board = Board(size)
         self.player_is_dead = False
+        self.down_pressed = False
 
         # Keep track which key was last pressed.
         self.move_left = False
         # Number indicating how many left and right keys are pressed.
         self.lr_keys_pressed = 0
+        self.lr_time_passed = 0
 
         # Interval in millis.
-        self.key_repeat_interval = 80
+        self.key_repeat_interval = 90
 
         # Auto down movement interval.
         self.auto_down_movement_interval = 500
-
-        pg.time.set_timer(pg.USEREVENT+1, self.auto_down_movement_interval)
+        self.down_time_passed = 0
 
     def reset(self):
         self.board.clear_board()
@@ -336,22 +337,21 @@ class Game():
 
             if event.type == pg.KEYDOWN:
                 if event.key == pg.K_s:
-                    print("hi0")
                     self.request_movement("Down")
-                    pg.time.set_timer(pg.USEREVENT+1, 0)
-                    pg.time.set_timer(pg.USEREVENT+1, self.key_repeat_interval)
+                    self.down_time_passed = 0
+                    self.down_pressed = True
 
                 elif event.key == pg.K_a:
                     self.move_left = True
                     self.lr_keys_pressed += 1
                     self.request_movement("Left")
-                    pg.time.set_timer(pg.USEREVENT+2, self.key_repeat_interval)
+                    self.lr_time_passed = 0
 
                 elif event.key == pg.K_d:
                     self.move_left = False
                     self.lr_keys_pressed += 1
                     self.request_movement("Right")
-                    pg.time.set_timer(pg.USEREVENT+2, self.key_repeat_interval)
+                    self.lr_time_passed = 0
 
                 elif event.key == pg.K_w or event.key == pg.K_RIGHT:
                     self.request_movement("TurnR")
@@ -364,33 +364,15 @@ class Game():
 
             elif event.type == pg.KEYUP:
                 if event.key == pg.K_s:
-                    print("hi1")
-                    pg.time.set_timer(pg.USEREVENT+1, 0)
-                    pg.time.set_timer(
-                        pg.USEREVENT+1, self.auto_down_movement_interval)
+                    self.down_pressed = False
 
                 elif event.key == pg.K_a:
                     self.move_left = False
                     self.lr_keys_pressed -= 1
-                    if self.lr_keys_pressed == 0:
-                        pg.time.set_timer(pg.USEREVENT+2, 0)
 
                 elif event.key == pg.K_d:
                     self.move_left = True
                     self.lr_keys_pressed -= 1
-                    if self.lr_keys_pressed == 0:
-                        pg.time.set_timer(pg.USEREVENT+2, 0)
-
-            # Repeated down movement.
-            elif event.type == pg.USEREVENT+1:
-                self.request_movement("Down")
-
-            # Repeated left / right movement.
-            elif event.type == pg.USEREVENT+2:
-                if self.move_left:
-                    self.request_movement("Left")
-                else:
-                    self.request_movement("Right")
 
     def request_movement(self, direction):
         if direction == "Down":
@@ -415,13 +397,28 @@ class Game():
             if not self.board.has_collision(self.current_tetramino, Offset(0, 0, -1)):
                 self.current_tetramino.rotate(-1)
 
-    def update(self):
+    def check_timers(self, time_passed):
+        if self.lr_keys_pressed:
+            self.lr_time_passed += time_passed
+            if self.lr_time_passed >= self.key_repeat_interval:
+                movement = "Left" if self.move_left else "Right"
+                self.request_movement(movement)
+                self.lr_time_passed %= self.key_repeat_interval
+
+        self.down_time_passed += time_passed
+        interval = self.key_repeat_interval if self.down_pressed else self.auto_down_movement_interval
+        if self.down_time_passed >= interval:
+            self.request_movement("Down")
+            self.down_time_passed %= interval
+
+    def update(self, time_passed):
+        self.check_events()
+        self.check_timers(time_passed)
+
         with self.renderer:
             self.renderer.render_board(self.board)
             self.renderer.render_tetramino(self.current_tetramino)
             self.renderer.render_grid()
-
-        self.check_events()
 
     def start(self):
         # Enableing only those inputs that are required
@@ -430,8 +427,8 @@ class Game():
                               pg.KEYUP, pg.USEREVENT])
         clock = pg.time.Clock()
         while True:
-            clock.tick(30)
-            self.update()
+            time_passed = clock.tick(30)
+            self.update(time_passed)
 
 
 class Render():
