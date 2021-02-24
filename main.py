@@ -23,10 +23,18 @@ settings = {
     "number_of_next_tetraminos": 6,  # Minimum 0, maximum 6
 }
 
-grid_color = (100, 100, 100)
-background_color = (200, 200, 200)
-tetramino_colores = [(0, 255, 255), (128, 0, 128), (0, 128, 0), (255, 0, 0),
-                     (255, 165, 0), (0, 0, 255), (255, 255, 0)]
+style = {
+    "background": (150, 150, 150),
+    "innerBackground": (200, 200, 200),
+    "tetraminoBoarder": (0, 0, 0),
+    "boarder": (100, 100, 100),
+    "grid": (170, 170, 170),
+    "boarderThickness": 4,
+    "tetraminoBoarderThickness": 2,
+}
+
+tetramino_colores = [(0, 255, 255), (200, 0, 200), (0, 200, 0), (255, 0, 0),
+                     (255, 165, 0), (50, 50, 255), (255, 255, 0)]
 
 
 # --- Tetraminos ---
@@ -467,10 +475,10 @@ class Game():
         self.check_timers(time_passed)
 
         with self.renderer:
+            self.renderer.render_grid()
             self.renderer.render_board(self.board)
             self.renderer.render_tetramino(self.current_tetramino)
             self.renderer.render_next_tetraminos(self.next_tetraminos)
-            self.renderer.render_grid()
             if self.held_tetramino is not None:
                 self.renderer.render_held_tetramino(self.held_tetramino)
 
@@ -506,14 +514,40 @@ class Render():
         self.board_surface = pg.Surface(
             (self.board_pixel_size.width, self.board_pixel_size.height)
         )
-        self.next_tetramino_surface = pg.Surface(
-            (self.fsb * block_size,
-             4 * self.tetramino_scale * block_size * settings["number_of_next_tetraminos"])
-        )
+        self.next_tetramino_surface = pg.Surface((
+            self.fsb * block_size,
+            4 * self.tetramino_scale * block_size *
+            settings["number_of_next_tetraminos"]
+        ))
         self.held_tetramino_surface = pg.Surface((
             round(self.fsb * block_size),
             round(self.fsb * block_size)
         ))
+        self.boarder_board = pg.Rect(
+            self.boundary + 1 + self.fsb * self.block_size + self.block_size,
+            self.boundary + 1,
+            self.board_pixel_size.width,
+            self.board_pixel_size.height
+        )
+        self.boarder_held = pg.Rect(
+            self.boundary + 1,
+            self.boundary + 1,
+            round(self.fsb * block_size),
+            round(self.fsb * block_size)
+        )
+        self.boarder_next = pg.Rect(
+            self.boundary + 1 + self.board_pixel_size.width +
+            self.fsb * self.block_size + 2 * self.block_size,
+            self.boundary + 1,
+            self.fsb * block_size,
+            4 * self.tetramino_scale * block_size *
+            settings["number_of_next_tetraminos"]
+        )
+
+    def draw_block(self, surface, rect, color):
+        pg.draw.rect(surface, tetramino_colores[color], rect)
+        pg.draw.rect(surface, style["tetraminoBoarder"],
+                     rect, width=style["tetraminoBoarderThickness"])
 
     def render_board(self, board):
         for row, col in board:
@@ -521,26 +555,28 @@ class Render():
             if color:
                 x = col * self.block_size
                 y = row * self.block_size
-                pg.draw.rect(self.board_surface, tetramino_colores[color - 1],
-                             pg.Rect(x, y, self.block_size, self.block_size))
+                rect = pg.Rect(x, y, self.block_size, self.block_size)
+                self.draw_block(self.board_surface, rect, color - 1)
 
     def render_grid(self):
         end_y = self.board_size.height * self.block_size
         for i in range(self.board_size.width + 1):
             x = i * self.block_size
-            pg.draw.line(self.board_surface, grid_color, (x, 0), (x, end_y))
+            pg.draw.line(self.board_surface,
+                         style["boarder"], (x, 0), (x, end_y))
 
         end_x = self.board_size.width * self.block_size
         for i in range(self.board_size.height + 1):
             y = i * self.block_size
-            pg.draw.line(self.board_surface, grid_color, (0, y), (end_x, y))
+            pg.draw.line(self.board_surface,
+                         style["boarder"], (0, y), (end_x, y))
 
     def render_tetramino(self, tetramino):
         for row, col in tetramino:
             x = col * self.block_size
             y = row * self.block_size
-            pg.draw.rect(self.board_surface, tetramino_colores[tetramino.type],
-                         pg.Rect(x, y, self.block_size, self.block_size))
+            rect = pg.Rect(x, y, self.block_size, self.block_size)
+            self.draw_block(self.board_surface, rect, tetramino.type)
 
     def render_next_tetraminos(self, tetraminos):
         for i, tetramino in enumerate(tetraminos):
@@ -549,24 +585,25 @@ class Render():
             for row, col in TETRAMINOS[tetramino.type][0]:
                 x = col * self.block_size * self.tetramino_scale + x_cord
                 y = row * self.block_size * self.tetramino_scale + y_cord
-                pg.draw.rect(self.next_tetramino_surface, tetramino_colores[tetramino.type],
-                             pg.Rect(x, y, self.block_size * self.tetramino_scale,
-                                     self.block_size * self.tetramino_scale))
+                rect = pg.Rect(x, y, self.block_size * self.tetramino_scale,
+                               self.block_size * self.tetramino_scale)
+                self.draw_block(self.next_tetramino_surface,
+                                rect, tetramino.type)
 
     def render_held_tetramino(self, tetramino):
         offset = 0.5 * self.tetramino_scale * self.block_size
         for row, col in TETRAMINOS[tetramino.type][0]:
             x = col * self.block_size * self.tetramino_scale + offset
             y = row * self.block_size * self.tetramino_scale + offset
-            pg.draw.rect(self.held_tetramino_surface, tetramino_colores[tetramino.type],
-                         pg.Rect(x, y, self.block_size * self.tetramino_scale,
-                                 self.block_size * self.tetramino_scale))
+            rect = pg.Rect(x, y, self.block_size * self.tetramino_scale,
+                           self.block_size * self.tetramino_scale)
+            self.draw_block(self.held_tetramino_surface, rect, tetramino.type)
 
     def __enter__(self):
-        self.screen.fill((20, 20, 20))
-        self.board_surface.fill(background_color)
-        self.next_tetramino_surface.fill(background_color)
-        self.held_tetramino_surface.fill(background_color)
+        self.screen.fill(style["background"])
+        self.board_surface.fill(style["innerBackground"])
+        self.next_tetramino_surface.fill(style["innerBackground"])
+        self.held_tetramino_surface.fill(style["innerBackground"])
 
     def __exit__(self, what, are, these):
         self.screen.blit(self.board_surface,
@@ -576,6 +613,12 @@ class Render():
                           self.boundary + 1))
         self.screen.blit(self.held_tetramino_surface,
                          (self.boundary + 1, self.boundary + 1))
+        pg.draw.rect(self.screen, style["boarder"],
+                     self.boarder_board, style["boarderThickness"])
+        pg.draw.rect(self.screen, style["boarder"],
+                     self.boarder_held, style["boarderThickness"])
+        pg.draw.rect(self.screen, style["boarder"],
+                     self.boarder_next, style["boarderThickness"])
         pg.display.update()
 
 
