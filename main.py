@@ -483,7 +483,7 @@ class Game():
                 self.renderer.render_held_tetramino(self.held_tetramino)
 
     def start(self):
-        # Enableing only those inputs that are required
+        # Enabling only those inputs that are required
         pg.event.set_allowed(None)
         pg.event.set_allowed([pg.QUIT, pg.KEYDOWN,
                               pg.KEYUP, pg.USEREVENT])
