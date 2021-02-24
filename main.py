@@ -10,6 +10,27 @@ Block = namedtuple("Block", "row col")
 Offset = namedtuple("Offset", "row col rot")
 Size = namedtuple("Size", "width height")
 
+# --- Settings ---
+
+settings = {
+    "height": 22,
+    "width": 10,
+    "fps": 30,
+    "key_repeat_interval": 90,
+    "auto_down_interval": 500,
+    "block_size": 30,
+    "boundary": 30,
+    "number_of_next_tetraminos": 6,  # Minimum 0, maximum 6
+}
+
+grid_color = (100, 100, 100)
+background_color = (200, 200, 200)
+tetramino_colores = [(0, 255, 255), (128, 0, 128), (0, 128, 0), (255, 0, 0),
+                     (255, 165, 0), (0, 0, 255), (255, 255, 0)]
+
+
+# --- Tetraminos ---
+
 I = [
 
     [0, 0, 0, 0,
@@ -141,15 +162,11 @@ O = [
 
 ]
 
-tetraminos = [I, T, S, Z, L, J, O]
-tetramino_colores = [(0, 255, 255), (128, 0, 128), (0, 128, 0), (255, 0, 0),
-                     (255, 165, 0), (0, 0, 255), (255, 255, 0)]
-background_color = (200, 200, 200)
-
+TETRAMINOS = [I, T, S, Z, L, J, O]
 tetraminos_size = []
 
 # Converting all Tetraminos into relative coordinates.
-for piece, tetra in enumerate(tetraminos):
+for piece, tetra in enumerate(TETRAMINOS):
 
     # Check if the tetramino is in a valid 'sqare' List.
     dim = sqrt(len(tetra[0]))
@@ -166,7 +183,7 @@ for piece, tetra in enumerate(tetraminos):
             if block == 1:
                 blocks.append(Block(i // dim, i % dim))
 
-        tetraminos[piece][r_index] = blocks
+        TETRAMINOS[piece][r_index] = blocks
 
 
 class Tetramino():
@@ -182,14 +199,14 @@ class Tetramino():
         self.rotation = self.new_rotation_state(amount)
 
     def get_rotated(self, relative_rotation):
-        for block in tetraminos[self.type][self.new_rotation_state(relative_rotation)]:
+        for block in TETRAMINOS[self.type][self.new_rotation_state(relative_rotation)]:
             yield Block(self.row + block.row, self.col + block.col)
 
     def new_rotation_state(self, amount):
-        return (self.rotation + amount) % len(tetraminos[self.type])
+        return (self.rotation + amount) % len(TETRAMINOS[self.type])
 
     def __iter__(self):
-        for block in tetraminos[self.type][self.rotation]:
+        for block in TETRAMINOS[self.type][self.rotation]:
             yield Block(self.row + block.row, self.col + block.col)
 
     def __str__(self):
@@ -200,7 +217,7 @@ class Bag():
 
     def __init__(self, width):
         self.width = width
-        self.number_of_tetraminos = len(tetraminos)
+        self.number_of_tetraminos = len(TETRAMINOS)
         self.refresh_bag()
 
     def next_tetramino(self):
@@ -283,8 +300,9 @@ class Game():
         self.bag = Bag(size.width)
         self.current_tetramino = self.bag.next_tetramino()
         self.next_tetraminos = deque(
-            [self.bag.next_tetramino() for i in range(6)])
-        self.renderer = Render(30, size)
+            [self.bag.next_tetramino() for i in range(settings["number_of_next_tetraminos"])])
+        print(len(self.next_tetraminos))
+        self.renderer = Render(settings["block_size"], size)
         self.board = Board(size)
         self.player_is_dead = False
         self.down_pressed = False
@@ -296,10 +314,10 @@ class Game():
         self.lr_time_passed = 0
 
         # Interval in millis.
-        self.key_repeat_interval = 90
+        self.key_repeat_interval = settings["key_repeat_interval"]
 
         # Auto down movement interval.
-        self.auto_down_movement_interval = 500
+        self.auto_down_movement_interval = settings["auto_down_interval"]
         self.down_time_passed = 0
 
     def reset(self):
@@ -309,6 +327,8 @@ class Game():
         self.score = 0
         self.lines_cleared = 0
         self.tetrises = 0
+        self.lr_time_passed = 0
+        self.down_time_passed = 0
 
     def drop_tetramino(self):
         while not self.board.has_collision(self.current_tetramino, Offset(1, 0, 0)):
@@ -322,8 +342,11 @@ class Game():
         if lines == 4:
             self.tetrises += 1
 
-        self.current_tetramino = self.next_tetraminos.popleft()
         self.next_tetraminos.append(self.bag.next_tetramino())
+        self.current_tetramino = self.next_tetraminos.popleft()
+
+        self.lr_time_passed = 0
+        self.down_time_passed = 0
 
         # Player has Lost if there is a collision at the start.
         if self.board.has_collision(self.current_tetramino, Offset(0, 0, 0)):
@@ -418,6 +441,7 @@ class Game():
         with self.renderer:
             self.renderer.render_board(self.board)
             self.renderer.render_tetramino(self.current_tetramino)
+            self.renderer.render_next_tetraminos(self.next_tetraminos)
             self.renderer.render_grid()
 
     def start(self):
@@ -426,8 +450,9 @@ class Game():
         pg.event.set_allowed([pg.QUIT, pg.KEYDOWN,
                               pg.KEYUP, pg.USEREVENT])
         clock = pg.time.Clock()
+        fps = settings["fps"]
         while True:
-            time_passed = clock.tick(30)
+            time_passed = clock.tick(fps)
             self.update(time_passed)
 
 
@@ -435,57 +460,74 @@ class Render():
     def __init__(self, block_size, board_size):
         self.block_size = block_size  # Single value since it's a square
         self.board_size = board_size
-        self.boundary = 30
+        self.boundary = settings["boundary"]
+        self.tetramino_scale = 0.5  # Size proportional to block_size
         self.board_pixel_size = Size(block_size * board_size.width,
                                      block_size * board_size.height)
-        self.window_size = (2 * self.board_pixel_size.width + 2 * self.boundary,
-                            self.board_pixel_size.height + 2 * self.boundary)
-        self.board_rect = pg.Rect(self.boundary + 1, self.boundary + 1,
-                                  self.board_pixel_size.width, self.board_pixel_size.height)
+        self.window_size = (
+            round(self.board_pixel_size.width +
+                  (1 + 5 * self.tetramino_scale) * block_size + 2 * self.boundary),
+            round(self.board_pixel_size.height + 2 * self.boundary))
 
-        pg.display.set_mode(self.window_size)
-        self.surface = pg.display.get_surface()
+        self.screen = pg.display.set_mode(self.window_size)
+        self.board_surface = pg.Surface(
+            (self.board_pixel_size.width, self.board_pixel_size.height))
+        self.next_tetramino_surface = pg.Surface(
+            (5 * self.tetramino_scale * block_size,
+             4 * self.tetramino_scale * block_size * settings["number_of_next_tetraminos"]))
 
     def render_board(self, board):
-        pg.draw.rect(self.surface, background_color, self.board_rect)
         for row, col in board:
             color = board.board[row][col]
             if color:
-                x = col * self.block_size + self.boundary + 1
-                y = row * self.block_size + self.boundary + 1
-                pg.draw.rect(self.surface, tetramino_colores[color - 1],
+                x = col * self.block_size
+                y = row * self.block_size
+                pg.draw.rect(self.board_surface, tetramino_colores[color - 1],
                              pg.Rect(x, y, self.block_size, self.block_size))
 
     def render_grid(self):
-        start_y = self.boundary + 1
-        end_y = self.board_size.height * self.block_size + self.boundary + 1
+        end_y = self.board_size.height * self.block_size
         for i in range(self.board_size.width + 1):
-            x = i * self.block_size + self.boundary + 1
-            pg.draw.line(self.surface, grid_color, (x, start_y), (x, end_y))
-        start_x = start_y
-        end_x = self.board_size.width * self.block_size + self.boundary + 1
+            x = i * self.block_size
+            pg.draw.line(self.board_surface, grid_color, (x, 0), (x, end_y))
+
+        end_x = self.board_size.width * self.block_size
         for i in range(self.board_size.height + 1):
-            y = i * self.block_size + self.boundary + 1
-            pg.draw.line(self.surface, grid_color, (start_x, y), (end_x, y))
+            y = i * self.block_size
+            pg.draw.line(self.board_surface, grid_color, (0, y), (end_x, y))
 
     def render_tetramino(self, tetramino):
         for row, col in tetramino:
-            x = col * self.block_size + self.boundary + 1
-            y = row * self.block_size + self.boundary + 1
-            pg.draw.rect(self.surface, tetramino_colores[tetramino.type],
+            x = col * self.block_size
+            y = row * self.block_size
+            pg.draw.rect(self.board_surface, tetramino_colores[tetramino.type],
                          pg.Rect(x, y, self.block_size, self.block_size))
 
     def render_next_tetraminos(self, tetraminos):
-        pass
+        for i, tetramino in enumerate(tetraminos):
+            x_cord = 0.5 * self.tetramino_scale * self.block_size
+            y_cord = x_cord + i * 4 * self.tetramino_scale * self.block_size
+            for row, col in TETRAMINOS[tetramino.type][0]:
+                x = col * self.block_size * self.tetramino_scale + x_cord
+                y = row * self.block_size * self.tetramino_scale + y_cord
+                pg.draw.rect(self.next_tetramino_surface, tetramino_colores[tetramino.type],
+                             pg.Rect(x, y, self.block_size * self.tetramino_scale,
+                                     self.block_size * self.tetramino_scale))
 
     def __enter__(self):
-        self.surface.fill((20, 20, 20))
+        self.screen.fill((20, 20, 20))
+        self.board_surface.fill(background_color)
+        self.next_tetramino_surface.fill(background_color)
 
     def __exit__(self, what, are, these):
+        self.screen.blit(self.board_surface,
+                         (self.boundary + 1, self.boundary + 1))
+        self.screen.blit(self.next_tetramino_surface,
+                         (self.boundary + 1 + self.board_pixel_size.width + self.block_size,
+                          self.boundary + 1))
         pg.display.update()
 
 
 if __name__ == "__main__":
-    grid_color = (100, 100, 100)
-    game = Game(Size(10, 22))
+    game = Game(Size(settings["width"], settings["height"]))
     game.start()
